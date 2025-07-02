@@ -1,0 +1,74 @@
+{
+  "name": "freefileconverterz",
+  "version": "1.0.0",
+  "description": "A free online file converter supporting multiple formats",
+  "scripts": {
+    "dev": "tailwindcss -i ./static/css/tailwind.css -o ./static/css/main.css --watch",
+    "build": "tailwindcss -i ./static/css/tailwind.css -o ./static/css/main.css --minify",
+    "lint": "eslint ./static/js --ext .js",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md,html,css}\"",
+    "prepare": "husky install"
+  },
+  "dependencies": {
+    "@tailwindcss/forms": "^0.5.7",
+    "@tailwindcss/typography": "^0.5.10",
+    "alpinejs": "^3.13.5",
+    "autoprefixer": "^10.4.16",
+    "axios": "^1.6.7",
+    "chart.js": "^4.4.1",
+    "clipboard": "^2.0.11",
+    "cropperjs": "^1.5.13",
+    "dropzone": "^6.0.0-beta.2",
+    "file-saver": "^2.0.5",
+    "flatpickr": "^4.6.13",
+    "fuse.js": "^7.0.0",
+    "js-cookie": "^3.0.5",
+    "lodash": "^4.17.21",
+    "postcss": "^8.4.35",
+    "preline": "^2.0.4",
+    "prettier": "^3.1.1",
+    "prismjs": "^1.29.0",
+    "quill": "^2.0.2",
+    "sweetalert2": "^11.10.8",
+    "tailwind-merge": "^2.2.1",
+    "tippy.js": "^6.3.7",
+    "tom-select": "^2.3.1",
+    "vanilla-lazyload": "^17.9.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.23.5",
+    "@babel/eslint-parser": "^7.23.3",
+    "@babel/preset-env": "^7.23.5",
+    "@tailwindcss/aspect-ratio": "^0.4.2",
+    "@tailwindcss/line-clamp": "^0.4.4",
+    "concurrently": "^8.2.1",
+    "eslint": "^8.54.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-import": "^2.29.0",
+    "eslint-plugin-jsdoc": "^46.9.0",
+    "eslint-plugin-prettier": "^5.0.1",
+    "eslint-plugin-simple-import-sort": "^10.0.0",
+    "eslint-plugin-tailwindcss": "^3.13.0",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.0.2",
+    "postcss-import": "^15.1.0",
+    "postcss-nested": "^6.0.1",
+    "tailwindcss": "^3.4.0",
+    "tailwindcss-animate": "^1.0.7"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,html,css}": [
+      "prettier --write"
+    ]
+  },
+  "browserslist": [
+    "defaults",
+    "not IE 11",
+    "not IE_Mob 11",
+    "maintained node versions"
+  ]
+}

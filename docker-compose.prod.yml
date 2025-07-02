@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: freefileconverterz:latest
+    restart: always
+    environment:
+      - APP_ENV=production
+      - PORT=3000
+      - UPLOAD_DIR=/app/uploads
+      - MAX_UPLOAD_SIZE=${MAX_UPLOAD_SIZE:-104857600}
+      - FILE_RETENTION=${FILE_RETENTION:-1h}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    ports:
+      - "3000:3000"
+    volumes:
+      - uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - app-network
+
+  # Optional: Traefik for reverse proxy with automatic HTTPS
+  traefik:
+    image: traefik:v2.10
+    restart: always
+    command:
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entryPoint.to=websecure
+      - --entrypoints.web.http.redirections.entryPoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.email=${LETSENCRYPT_EMAIL:-}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.tlschallenge=true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_certs:/letsencrypt
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  uploads:
+  traefik_certs:

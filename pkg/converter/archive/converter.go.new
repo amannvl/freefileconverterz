@@ -1,0 +1,316 @@
+package archive
+
+import (
+	"archive/tar"
+	"archive/zip"
+	"compress/gzip"
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"github.com/amannvl/freefileconverterz/pkg/converter/base"
+	"github.com/amannvl/freefileconverterz/pkg/converter/iface"
+	"github.com/rs/zerolog/log"
+)
+
+// ArchiveConverter handles archive format conversions
+type ArchiveConverter struct {
+	*base.BaseConverter
+	tempDir string
+}
+
+// NewArchiveConverter creates a new ArchiveConverter
+func NewArchiveConverter(tempDir string) *ArchiveConverter {
+	return &ArchiveConverter{
+		BaseConverter: base.NewBaseConverter("archive", map[string][]string{
+			"zip":     {"tar", "tar.gz", "tar.bz2", "tar.xz", "7z"},
+			"tar":     {"zip", "tar.gz", "tar.bz2", "tar.xz", "7z"},
+			"tar.gz":  {"zip", "tar", "tar.bz2", "tar.xz", "7z"},
+			"tar.bz2": {"zip", "tar", "tar.gz", "tar.xz", "7z"},
+			"tar.xz":  {"zip", "tar", "tar.gz", "tar.bz2", "7z"},
+			"7z":      {"zip", "tar", "tar.gz", "tar.bz2", "tar.xz"},
+			"rar":     {"zip", "tar", "tar.gz", "tar.bz2", "tar.xz", "7z"},
+		}),
+		tempDir: tempDir,
+	}
+}
+
+// Convert converts an archive from one format to another
+func (c *ArchiveConverter) Convert(ctx context.Context, input io.Reader, options map[string]interface{}) (io.Reader, error) {
+	sourceFormat, _ := options["source_format"].(string)
+	targetFormat, _ := options["target_format"].(string)
+
+	// Create a temporary file for the input
+	tempInput, err := os.CreateTemp(c.tempDir, "input-*."+sourceFormat)
+	if err != nil {
+		return nil, iface.NewConversionError(
+			"io_error",
+			"failed to create temporary input file",
+			err,
+		)
+	}
+	defer os.Remove(tempInput.Name())
+
+	// Write the input to the temporary file
+	if _, err := io.Copy(tempInput, input); err != nil {
+		return nil, iface.NewConversionError(
+			"io_error",
+			"failed to write to temporary file",
+			err,
+		)
+	}
+	tempInput.Close()
+
+	// Create a temporary directory for extraction
+	extractDir, err := os.MkdirTemp(c.tempDir, "extracted-")
+	if err != nil {
+		return nil, iface.NewConversionError(
+			"io_error",
+			"failed to create temporary directory",
+			err,
+		)
+	}
+	defer os.RemoveAll(extractDir)
+
+	// Extract the input archive
+	if err := c.extractArchive(tempInput.Name(), extractDir, sourceFormat); err != nil {
+		return nil, iface.NewConversionError(
+			"extraction_failed",
+			"failed to extract archive",
+			err,
+		)
+	}
+
+	// Create a temporary file for the output
+	outputFile := filepath.Join(c.tempDir, "output."+targetFormat)
+	defer os.Remove(outputFile)
+
+	// Create the output archive
+	if err := c.createArchive(extractDir, outputFile, targetFormat, options); err != nil {
+		return nil, iface.NewConversionError(
+			"archive_creation_failed",
+			"failed to create archive",
+			err,
+		)
+	}
+
+	// Read the converted file
+	convertedFile, err := os.Open(outputFile)
+	if err != nil {
+		return nil, iface.NewConversionError(
+			"io_error",
+			"failed to open converted file",
+			err,
+		)
+	}
+
+	return convertedFile, nil
+}
+
+// extractArchive extracts an archive to the specified directory
+func (c *ArchiveConverter) extractArchive(src, dest, format string) error {
+	switch format {
+	case "zip":
+		return c.extractZip(src, dest)
+	case "tar":
+		return c.extractTar(src, dest, false)
+	case "tar.gz", "tgz":
+		return c.extractTar(src, dest, true)
+	case "tar.bz2":
+		return c.extractTarBz2(src, dest)
+	case "tar.xz":
+		return c.extractTarXz(src, dest)
+	case "7z":
+		return c.extract7z(src, dest)
+	case "rar":
+		return c.extractRar(src, dest)
+	default:
+		return fmt.Errorf("unsupported archive format: %s", format)
+	}
+}
+
+// createArchive creates an archive from the specified directory
+func (c *ArchiveConverter) createArchive(src, dest, format string, options map[string]interface{}) error {
+	switch format {
+	case "zip":
+		return c.createZip(src, dest, options)
+	case "tar":
+		return c.createTar(src, dest, false, options)
+	case "tar.gz", "tgz":
+		return c.createTar(src, dest, true, options)
+	case "tar.bz2":
+		return c.createTarBz2(src, dest, options)
+	case "tar.xz":
+		return c.createTarXz(src, dest, options)
+	case "7z":
+		return c.create7z(src, dest, options)
+	default:
+		return fmt.Errorf("unsupported archive format: %s", format)
+	}
+}
+
+// extractZip extracts a ZIP archive
+func (c *ArchiveConverter) extractZip(src, dest string) error {
+	return iface.NewConversionError(
+		"not_implemented",
+		"ZIP extraction not implemented",
+		nil,
+	)
+}
+
+// extractTar extracts a TAR archive, optionally with gzip compression
+func (c *ArchiveConverter) extractTar(src, dest string, gzipped bool) error {
+	return iface.NewConversionError(
+		"not_implemented",
+		"TAR extraction not implemented",
+		nil,
+	)
+}
+
+// extractTarBz2 extracts a BZIP2 compressed TAR archive
+func (c *ArchiveConverter) extractTarBz2(src, dest string) error {
+	return iface.NewConversionError(
+		"not_implemented",
+		"BZIP2 TAR extraction not implemented",
+		nil,
+	)
+}
+
+// extractTarXz extracts a XZ compressed TAR archive
+func (c *ArchiveConverter) extractTarXz(src, dest string) error {
+	return iface.NewConversionError(
+		"not_implemented",
+		"XZ TAR extraction not implemented",
+		nil,
+	)
+}
+
+// extract7z extracts a 7-Zip archive
+func (c *ArchiveConverter) extract7z(src, dest string) error {
+	cmd := exec.Command("7z", "x", "-o"+dest, src)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("output", string(output)).
+			Msg("7z command failed")
+		return fmt.Errorf("7z extraction failed: %w", err)
+	}
+	return nil
+}
+
+// extractRar extracts a RAR archive
+func (c *ArchiveConverter) extractRar(src, dest string) error {
+	cmd := exec.Command("unrar", "x", "-o+", src, dest)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("output", string(output)).
+			Msg("unrar command failed")
+		return fmt.Errorf("RAR extraction failed: %w", err)
+	}
+	return nil
+}
+
+// createZip creates a ZIP archive
+func (c *ArchiveConverter) createZip(src, dest string, options map[string]interface{}) error {
+	return iface.NewConversionError(
+		"not_implemented",
+		"ZIP creation not implemented",
+		nil,
+	)
+}
+
+// createTar creates a TAR archive, optionally with gzip compression
+func (c *ArchiveConverter) createTar(src, dest string, gzipped bool, options map[string]interface{}) error {
+	return iface.NewConversionError(
+		"not_implemented",
+		"TAR creation not implemented",
+		nil,
+	)
+}
+
+// createTarBz2 creates a BZIP2 compressed TAR archive
+func (c *ArchiveConverter) createTarBz2(src, dest string, options map[string]interface{}) error {
+	return iface.NewConversionError(
+		"not_implemented",
+		"BZIP2 TAR creation not implemented",
+		nil,
+	)
+}
+
+// createTarXz creates a XZ compressed TAR archive
+func (c *ArchiveConverter) createTarXz(src, dest string, options map[string]interface{}) error {
+	return iface.NewConversionError(
+		"not_implemented",
+		"XZ TAR creation not implemented",
+		nil,
+	)
+}
+
+// create7z creates a 7-Zip archive
+func (c *ArchiveConverter) create7z(src, dest string, options map[string]interface{}) error {
+	compressionLevel := "5" // Default compression level (0-9)
+	if level, ok := options["compression_level"].(int); ok && level >= 0 && level <= 9 {
+		compressionLevel = strconv.Itoa(level)
+	}
+
+	cmd := exec.Command("7z", "a", "-t7z", "-mx="+compressionLevel, dest, src)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("output", string(output)).
+			Msg("7z command failed")
+		return fmt.Errorf("7z archive creation failed: %w", err)
+	}
+	return nil
+}
+
+// ValidateOptions validates the conversion options
+func (c *ArchiveConverter) ValidateOptions(options map[string]interface{}) error {
+	// Check required options
+	if _, ok := options["source_format"]; !ok {
+		return iface.NewConversionError("missing_option", "source_format is required", nil)
+	}
+
+	if _, ok := options["target_format"]; !ok {
+		return iface.NewConversionError("missing_option", "target_format is required", nil)
+	}
+
+	sourceFormat, ok := options["source_format"].(string)
+	if !ok {
+		return iface.NewConversionError("invalid_option", "source_format must be a string", nil)
+	}
+
+	targetFormat, ok := options["target_format"].(string)
+	if !ok {
+		return iface.NewConversionError("invalid_option", "target_format must be a string", nil)
+	}
+
+	if !c.SupportsConversion(sourceFormat, targetFormat) {
+		return iface.NewConversionError(
+			"unsupported_conversion",
+			fmt.Sprintf("conversion from %s to %s is not supported", sourceFormat, targetFormat),
+			nil,
+		)
+	}
+
+	// Validate compression level if provided
+	if level, ok := options["compression_level"].(int); ok {
+		if level < 0 || level > 9 {
+			return iface.NewConversionError(
+				"invalid_option",
+				"compression_level must be between 0 and 9",
+				nil,
+			)
+		}
+	}
+
+	return nil
+}

@@ -1,0 +1,92 @@
+#!/bin/bash
+
+# Configuration
+BIN_DIR="$(pwd)/bin/linux/amd64"
+TEMP_DIR="/tmp/freefileconverterz"
+
+# Create necessary directories
+mkdir -p "$BIN_DIR"
+mkdir -p "$TEMP_DIR"
+
+# Function to download and extract binary
+download_binary() {
+    local name=$1
+    local url=$2
+    local dest_file="$BIN_DIR/$name"
+    
+    echo "Downloading $name..."
+    if curl -L "$url" -o "$dest_file" --progress-bar; then
+        chmod +x "$dest_file"
+        echo "✓ $name installed successfully"
+        return 0
+    else
+        echo "❌ Failed to download $name"
+        return 1
+    fi
+}
+
+# Check if we're on Linux
+if [ "$(uname -s)" != "Linux" ]; then
+    echo "This script is for Linux only. Skipping binary setup."
+    exit 0
+fi
+
+# Download and setup LibreOffice (using AppImage for portability)
+if [ ! -f "$BIN_DIR/soffice" ]; then
+    echo "Setting up LibreOffice..."
+    LO_URL="https://download.documentfoundation.org/libreoffice/stable/7.5.8/linux/x86_64/LibreOffice_7.5.8_Linux_x86-64_rpm_langpack_en-GB.tar.gz"
+    mkdir -p "$TEMP_DIR/lo"
+    curl -L "$LO_URL" | tar xz -C "$TEMP_DIR/lo" --strip-components=1
+    find "$TEMP_DIR/lo" -name "LibreOffice*.AppImage" -exec cp {} "$BIN_DIR/soffice" \;
+    chmod +x "$BIN_DIR/soffice"
+    rm -rf "$TEMP_DIR/lo"
+fi
+
+# Download and setup FFmpeg
+if [ ! -f "$BIN_DIR/ffmpeg" ]; then
+    echo "Setting up FFmpeg..."
+    FFMPEG_URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
+    mkdir -p "$TEMP_DIR/ffmpeg"
+    curl -L "$FFMPEG_URL" | tar xJ -C "$TEMP_DIR/ffmpeg" --strip-components=1
+    cp "$TEMP_DIR/ffmpeg/bin/ffmpeg" "$BIN_DIR/"
+    cp "$TEMP_DIR/ffmpeg/bin/ffprobe" "$BIN_DIR/"
+    rm -rf "$TEMP_DIR/ffmpeg"
+fi
+
+# Download and setup ImageMagick
+if [ ! -f "$BIN_DIR/convert" ]; then
+    echo "Setting up ImageMagick..."
+    IMAGEMAGICK_URL="https://download.imagemagick.org/ImageMagick/download/binaries/ImageMagick-x86_64-pc-linux-gnu.tar.xz"
+    mkdir -p "$TEMP_DIR/imagemagick"
+    curl -L "$IMAGEMAGICK_URL" | tar xJ -C "$TEMP_DIR/imagemagick" --strip-components=1
+    cp "$TEMP_DIR/imagemagick/convert" "$BIN_DIR/"
+    cp "$TEMP_DIR/imagemagick/magick" "$BIN_DIR/"
+    rm -rf "$TEMP_DIR/imagemagick"
+fi
+
+# Download and setup 7-Zip
+if [ ! -f "$BIN_DIR/7z" ]; then
+    echo "Setting up 7-Zip..."
+    download_binary "7z" "https://www.7-zip.org/a/7z2301-linux-x64.tar.xz"
+    # Extract the binary from the archive
+    if [ -f "$BIN_DIR/7z" ]; then
+        tar xf "$BIN_DIR/7z" -C "$BIN_DIR" --strip-components=1
+        rm -f "$BIN_DIR/7z"
+    fi
+fi
+
+# Download and setup UnRAR
+if [ ! -f "$BIN_DIR/unrar" ]; then
+    echo "Setting up UnRAR..."
+    UNRAR_URL="https://www.rarlab.com/rar/rarlinux-x64-623.tar.gz"
+    mkdir -p "$TEMP_DIR/unrar"
+    curl -L "$UNRAR_URL" | tar xz -C "$TEMP_DIR/unrar" --strip-components=1
+    cp "$TEMP_DIR/unrar/unrar" "$BIN_DIR/"
+    rm -rf "$TEMP_DIR/unrar"
+fi
+
+echo "\n✅ All binaries have been installed to $BIN_DIR"
+echo "Add this directory to your PATH or use the full path to the binaries."
+
+# Clean up
+exit 0
