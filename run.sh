@@ -2,7 +2,7 @@
 set -e
 
 # Configuration
-FRONTEND_PORT=9000
+FRONTEND_PORT=9002
 BACKEND_PORT=9001
 CONTAINER_NAME="freefileconverterz"
 DOCKER_IMAGE="freefileconverterz"

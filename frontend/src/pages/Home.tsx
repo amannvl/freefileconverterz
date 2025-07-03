@@ -185,15 +185,19 @@ export default function Home() {
                 className="mt-10 flex flex-col sm:flex-row gap-4 justify-center items-center"
                 variants={fadeInUp}
               >
-                <Link
-                  to="/convert"
+                <a
+                  href="#formats-section"
                   className="group relative inline-flex items-center px-8 py-4 overflow-hidden text-lg font-bold text-white rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all duration-200 transform hover:-translate-y-0.5 hover:shadow-xl"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    document.getElementById('formats-section')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
                 >
                   <span className="absolute right-0 -mr-1 transform group-hover:translate-x-1 transition-transform duration-200">
                     <ArrowRightIcon className="h-5 w-5" />
                   </span>
                   <span className="relative mr-4">Start Converting Now</span>
-                </Link>
+                </a>
                 
                 <a
                   href="#features"
@@ -260,7 +264,7 @@ export default function Home() {
       </div>
 
       {/* Conversion Types */}
-      <div className="py-16 bg-gradient-to-b from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
+      <div id="formats-section" className="py-16 bg-gradient-to-b from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div 
             className="text-center"
