@@ -1,26 +1,36 @@
 package storage
 
 import (
+	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/amannvl/freefileconverterz/internal/config"
 	"github.com/amannvl/freefileconverterz/pkg/utils"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 // FileStorage handles file operations
 type FileStorage struct {
 	basePath    string
 	maxFileSize int64
+	logger      utils.Logger
 }
 
 // NewFileStorage creates a new FileStorage instance
-func NewFileStorage(basePath string, maxFileSize int64) (*FileStorage, error) {
+func NewFileStorage(basePath string, maxFileSize int64, logger utils.Logger) (*FileStorage, error) {
 	// Create base directory if it doesn't exist
 	if err := os.MkdirAll(basePath, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create storage directory: %w", err)
@@ -29,6 +39,7 @@ func NewFileStorage(basePath string, maxFileSize int64) (*FileStorage, error) {
 	return &FileStorage{
 		basePath:    basePath,
 		maxFileSize: maxFileSize,
+		logger:      logger,
 	}, nil
 }
 
@@ -36,7 +47,7 @@ func NewFileStorage(basePath string, maxFileSize int64) (*FileStorage, error) {
 func (s *FileStorage) SaveFile(fileHeader *multipart.FileHeader) (string, error) {
 	// Validate file size
 	if fileHeader.Size > s.maxFileSize {
-		return "", utils.ErrFileTooLarge
+		return "", fmt.Errorf("file size exceeds maximum allowed size of %d bytes", s.maxFileSize)
 	}
 
 	// Generate a unique filename
@@ -70,14 +81,7 @@ func (s *FileStorage) SaveFile(fileHeader *multipart.FileHeader) (string, error)
 
 // GetFilePath returns the full path to a stored file
 func (s *FileStorage) GetFilePath(filename string) (string, error) {
-	filePath := filepath.Join(s.basePath, filename)
-
-	// Verify the file exists
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return "", os.ErrNotExist
-	}
-
-	return filePath, nil
+	return filepath.Join(s.basePath, filename), nil
 }
 
 // DeleteFile removes a file from storage
@@ -94,7 +98,7 @@ func (s *FileStorage) Cleanup(olderThan time.Duration) error {
 	}
 
 	now := time.Now()
-	var firstError error
+	var firstErr error
 
 	for _, file := range files {
 		if file.IsDir() {
@@ -103,26 +107,45 @@ func (s *FileStorage) Cleanup(olderThan time.Duration) error {
 
 		info, err := file.Info()
 		if err != nil {
-			if firstError == nil {
-				firstError = err
+			if firstErr == nil {
+				firstErr = err
+			}
+			if s.logger != nil {
+				s.logger.Error("Failed to get file info", "error", err, "file", file.Name())
 			}
 			continue
 		}
 
 		if now.Sub(info.ModTime()) > olderThan {
-			if err := os.Remove(filepath.Join(s.basePath, file.Name())); err != nil && firstError == nil {
-				firstError = err
+			filePath := filepath.Join(s.basePath, file.Name())
+			if err := os.Remove(filePath); err != nil {
+				errMsg := fmt.Errorf("failed to remove file %s: %w", filePath, err)
+				if firstErr == nil {
+					firstErr = errMsg
+				}
+				if s.logger != nil {
+					s.logger.Error("Failed to remove file", "error", err, "file", filePath)
+				}
+			} else if s.logger != nil {
+				s.logger.Info("Removed old file", "file", filePath, "age", now.Sub(info.ModTime()))
 			}
 		}
 	}
 
-	return firstError
+	return firstErr
 }
 
 // GetFileInfo returns information about a stored file
 func (s *FileStorage) GetFileInfo(filename string) (os.FileInfo, error) {
 	filePath := filepath.Join(s.basePath, filename)
-	return os.Stat(filePath)
+	info, err := os.Stat(filePath)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("Failed to get file info", "error", err, "file", filePath)
+		}
+		return nil, err
+	}
+	return info, nil
 }
 
 // FileExists checks if a file exists in storage
@@ -151,14 +174,32 @@ func (s *FileStorage) GetMimeType(filename string) (string, error) {
 	}
 	defer file.Close()
 
-	// Only the first 512 bytes are used to sniff the content type
+	// Read the first 512 bytes to detect the content type
 	buffer := make([]byte, 512)
 	_, err = file.Read(buffer)
-	if err != nil {
+	if err != nil && err != io.EOF {
 		return "", err
 	}
 
-	return http.DetectContentType(buffer), nil
+	// Reset the read pointer
+	file.Seek(0, 0)
+
+	// Simple content type detection based on file extension
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".jpg", ".jpeg":
+		return "image/jpeg", nil
+	case ".png":
+		return "image/png", nil
+	case ".gif":
+		return "image/gif", nil
+	case ".pdf":
+		return "application/pdf", nil
+	case ".txt":
+		return "text/plain", nil
+	default:
+		return "application/octet-stream", nil
+	}
 }
 
 // MoveFile moves a file within the storage
@@ -172,26 +213,7 @@ func (s *FileStorage) MoveFile(oldPath, newPath string) error {
 	}
 
 	return os.Rename(oldPath, newPath)
-} storage
-
-import (
-	"bytes"
-	"context"
-	"errors"
-	"fmt"
-	"io"
-	"mime/multipart"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
-
-	"github.com/amannvl/freefileconverterz/internal/config"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-)
+}
 
 // FileInfo contains information about a file in storage
 type FileInfo struct {

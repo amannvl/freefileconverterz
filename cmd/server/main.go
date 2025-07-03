@@ -14,7 +14,6 @@ import (
 
 	"github.com/amannvl/freefileconverterz/internal/config"
 	"github.com/amannvl/freefileconverterz/internal/handlers"
-	"github.com/amannvl/freefileconverterz/internal/middleware"
 	"github.com/amannvl/freefileconverterz/internal/service"
 	"github.com/amannvl/freefileconverterz/internal/storage"
 	"github.com/amannvl/freefileconverterz/internal/tools"
@@ -98,7 +97,7 @@ func main() {
 		}
 
 		var handler slog.Handler = slog.NewJSONHandler(os.Stdout, handlerOpts)
-		if cfg.Environment == "development" {
+		if cfg.App.Env == "development" {
 			handler = slog.NewTextHandler(os.Stdout, handlerOpts)
 		}
 
@@ -131,20 +130,19 @@ func main() {
 
 	// Create Fiber app with custom config
 	app := fiber.New(fiber.Config{
-		ReadTimeout:         cfg.Server.ReadTimeout,
-		WriteTimeout:        cfg.Server.WriteTimeout,
-		IdleTimeout:         cfg.Server.IdleTimeout,
-		BodyLimit:           int(cfg.Storage.MaxUploadSize), // Set the maximum request body size from storage config
-		Views:              engine,
-		ViewsLayout:        "layouts/main",
-		ErrorHandler:       middleware.ErrorHandler,
+		ReadTimeout:        30 * time.Second,
+		WriteTimeout:       30 * time.Second,
+		IdleTimeout:        30 * time.Second,
+		BodyLimit:          50 * 1024 * 1024, // 50MB max request body size
+		Views:             engine,
+		ViewsLayout:       "layouts/main",
 		DisableStartupMessage: true,
 	})
 
 	// Middleware
 	app.Use(recover.New())
-	app.Use(cors.New(cors.Config{
-		AllowOrigins: strings.Join(cfg.Security.CORSAllowedOrigins, ","),
+	// Configure CORS
+	corsConfig := cors.Config{
 		AllowMethods: strings.Join([]string{
 			fiber.MethodGet,
 			fiber.MethodPost,
@@ -154,22 +152,34 @@ func main() {
 			fiber.MethodPatch,
 		}, ","),
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
-		AllowCredentials: true,
-	}))
+	}
 
-	// Initialize file storage
-	fileStorage, err := storage.NewFileStorage(cfg.Storage.UploadDir)
+	// Only set AllowCredentials to true if we have specific origins
+	if len(cfg.Security.CORSAllowedOrigins) > 0 && cfg.Security.CORSAllowedOrigins[0] != "*" {
+		corsConfig.AllowOrigins = strings.Join(cfg.Security.CORSAllowedOrigins, ",")
+		corsConfig.AllowCredentials = true
+	} else {
+		corsConfig.AllowOrigins = "*"
+		corsConfig.AllowCredentials = false
+	}
+
+	app.Use(cors.New(corsConfig))
+
+	// Initialize storage
+	storageImpl, err := storage.NewStorage(cfg.Storage)
 	if err != nil {
-		slog.Error("Failed to initialize file storage", "error", err)
+		slog.Error("Failed to initialize storage", "error", err)
 		os.Exit(1)
 	}
 
-	// Initialize and start cleanup service
-	cleanupInterval := 1 * time.Hour // Run cleanup every hour
-	maxFileAge := 24 * time.Hour    // Delete files older than 24 hours
-	cleanupService := service.NewCleanupService(log, cfg.Storage.UploadDir, cleanupInterval, maxFileAge)
-	cleanupService.Start()
-	defer cleanupService.Stop()
+	// Initialize and start cleanup service if needed
+	if cfg.Storage.Provider == "local" {
+		cleanupInterval := 1 * time.Hour // Run cleanup every hour
+		maxFileAge := 24 * time.Hour    // Delete files older than 24 hours
+		cleanupService := service.NewCleanupService(log, cfg.Storage.UploadDir, cleanupInterval, maxFileAge)
+		cleanupService.Start()
+		defer cleanupService.Stop()
+	}
 
 	// Initialize tool manager
 	toolManager, err := tools.NewToolManager(filepath.Join(cfg.Storage.TempDir, "bin"), cfg.Storage.TempDir)
@@ -178,11 +188,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Log tool manager initialization
+	slog.Info("Initializing tool manager...", "bin_dir", filepath.Join(cfg.Storage.TempDir, "bin"), "temp_dir", cfg.Storage.TempDir)
+
 	// Ensure all required tools are available
-	ctx := context.Background()
-	if err := toolManager.EnsureTools(ctx); err != nil {
+	if err := toolManager.EnsureTools(); err != nil {
 		slog.Error("Failed to ensure required tools are available", "error", err)
-		os.Exit(1)
+		slog.Info("Continuing with limited functionality...")
 	}
 
 	// Initialize converter factory with temp directory and tool manager
@@ -192,8 +204,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Setup API routes first
-	handlers.SetupRoutes(app, cfg, fileStorage, converterFactory, log)
+	// Setup API routes
+	handlers.SetupRoutes(app, cfg, storageImpl, converterFactory, log)
 
 	// Setup static files after API routes
 	app.Static("/", "./static")
@@ -204,39 +216,45 @@ func main() {
 		return c.SendFile("./static/index.html")
 	})
 
-	// Clean up temp files on shutdown
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		
-		if err := fileStorage.Cleanup(ctx, 24*time.Hour); err != nil {
-			slog.Error("Failed to clean up temp files", "error", err)
-		}
-	}()
+	// Create a channel to listen for interrupt signal
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
-	// Start server in a goroutine so we can gracefully shut it down
+	// Start server in a goroutine
+	serverShutdown := make(chan error, 1)
 	go func() {
 		slog.Info("Starting server", "port", cfg.Server.Port, "environment", cfg.App.Env)
 		if err := app.Listen(":" + cfg.Server.Port); err != nil {
-			slog.Error("Server failed to start", "error", err)
-			os.Exit(1)
+			serverShutdown <- err
 		}
 	}()
 
-	// Wait for interrupt signal to gracefully shut down the server
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	<-quit
+	// Wait for interrupt signal
+	select {
+	case err := <-serverShutdown:
+		slog.Error("Server error:", "error", err)
+	case sig := <-quit:
+		slog.Info("Received signal, shutting down...", "signal", sig)
+	}
 
 	slog.Info("Shutting down server...")
 
 	// Create a deadline to wait for
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// Shutdown the server
 	if err := app.ShutdownWithContext(ctx); err != nil {
 		slog.Error("Server forced to shutdown:", "error", err)
+	}
+
+	// Clean up temp files on shutdown
+	slog.Info("Cleaning up temporary files...")
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cleanupCancel()
+	
+	if err := storageImpl.Cleanup(cleanupCtx, 0); err != nil { // Clean up all temporary files
+		slog.Error("Failed to clean up temp files", "error", err)
 	}
 
 	slog.Info("Server gracefully stopped")

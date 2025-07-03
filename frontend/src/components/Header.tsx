@@ -40,6 +40,16 @@ export default function Header() {
               >
                 Home
               </Link>
+              <Link
+                to="/api-docs"
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  currentPath === '/api-docs'
+                    ? 'bg-indigo-50 text-indigo-700'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                API
+              </Link>
               
               {conversionTypes.map((type) => (
                 <Link

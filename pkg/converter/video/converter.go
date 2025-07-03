@@ -2,12 +2,9 @@ package video
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/amannvl/freefileconverterz/internal/tools"
@@ -20,125 +17,100 @@ import (
 type VideoConverter struct {
 	*base.BaseConverter
 	toolManager *tools.ToolManager
-	tempDir    string
 }
 
 // NewVideoConverter creates a new VideoConverter
-func NewVideoConverter(toolManager *tools.ToolManager, tempDir string) *VideoConverter {
-	return &VideoConverter{
-		BaseConverter: base.NewBaseConverter("video", map[string][]string{
-			"mp4":  {"avi", "mov", "mkv", "wmv", "flv", "webm", "3gp", "gif"},
-			"avi":  {"mp4", "mov", "mkv", "wmv", "flv", "webm", "3gp"},
-			"mov":  {"mp4", "avi", "mkv", "wmv", "flv", "webm", "3gp"},
-			"mkv":  {"mp4", "avi", "mov", "wmv", "flv", "webm", "3gp"},
-			"wmv":  {"mp4", "avi", "mov", "mkv", "flv", "webm", "3gp"},
-			"flv":  {"mp4", "avi", "mov", "mkv", "wmv", "webm", "3gp"},
-			"webm": {"mp4", "avi", "mov", "mkv", "wmv", "flv", "3gp"},
-			"3gp":  {"mp4", "avi", "mov", "mkv", "wmv", "flv", "webm"},
-		}),
-		toolManager: toolManager,
-		tempDir:     tempDir,
+func NewVideoConverter(toolManager *tools.ToolManager, tempDir string) iface.Converter {
+	converter := &VideoConverter{
+		BaseConverter: base.NewBaseConverter(toolManager, tempDir),
+		toolManager:   toolManager,
 	}
+
+	// Register supported formats and conversions
+	converter.AddSupportedConversion("mp4", "avi", "mov", "mkv", "wmv", "flv", "webm", "3gp", "gif")
+	converter.AddSupportedConversion("avi", "mp4", "mov", "mkv", "wmv", "flv", "webm", "3gp")
+	converter.AddSupportedConversion("mov", "mp4", "avi", "mkv", "wmv", "flv", "webm", "3gp")
+	converter.AddSupportedConversion("mkv", "mp4", "avi", "mov", "wmv", "flv", "webm", "3gp")
+	converter.AddSupportedConversion("wmv", "mp4", "avi", "mov", "mkv", "flv", "webm", "3gp")
+	converter.AddSupportedConversion("flv", "mp4", "avi", "mov", "mkv", "wmv", "webm", "3gp")
+	converter.AddSupportedConversion("webm", "mp4", "avi", "mov", "mkv", "wmv", "flv", "3gp")
+	converter.AddSupportedConversion("3gp", "mp4", "avi", "mov", "mkv", "wmv", "flv", "webm")
+
+	return converter
 }
 
 // Convert converts a video file from one format to another
-func (c *VideoConverter) Convert(ctx context.Context, input io.Reader, options map[string]interface{}) (io.Reader, error) {
-	sourceFormat, _ := options["source_format"].(string)
-	targetFormat, _ := options["target_format"].(string)
-
-	// Create a temporary file for the input
-	tempInput, err := os.CreateTemp(c.tempDir, "input-*."+sourceFormat)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temporary input file: %w", err)
+func (c *VideoConverter) Convert(ctx context.Context, inputPath, outputPath string) error {
+	// Get the file extension to determine the target format
+	extension := filepath.Ext(outputPath)
+	if len(extension) == 0 {
+		return iface.NewConversionError(
+			"invalid_output",
+			"output path must have an extension",
+			nil,
+		)
 	}
-	defer os.Remove(tempInput.Name())
+	targetFormat := extension[1:] // Remove the dot
 
-	// Write the input to the temporary file
-	if _, err := io.Copy(tempInput, input); err != nil {
-		return nil, fmt.Errorf("failed to write to temporary file: %w", err)
-	}
-	tempInput.Close()
-
-	// Create a temporary file for the output
-	outputFile := filepath.Join(c.tempDir, "output."+targetFormat)
-	defer os.Remove(outputFile)
-
-	// Build FFmpeg command
-	args := []string{
-		"-y", // Overwrite output file if it exists
-		"-i", tempInput.Name(),
-	}
-
-	// Add video codec and bitrate options
-	videoCodec := c.getVideoCodecForFormat(targetFormat)
-	if videoCodec != "" {
-		args = append(args, "-c:v", videoCodec)
-	}
-
-	// Add audio codec
-	audioCodec := c.getAudioCodecForFormat(targetFormat)
-	args = append(args, "-c:a", audioCodec)
-
-	// Add video bitrate if specified
-	if bitrate, ok := options["video_bitrate"].(string); ok && bitrate != "" {
-		args = append(args, "-b:v", bitrate)
-	}
-
-	// Add audio bitrate if specified
-	if audioBitrate, ok := options["audio_bitrate"].(string); ok && audioBitrate != "" {
-		args = append(args, "-b:a", audioBitrate)
-	}
-
-	// Add resolution if specified
-	if width, ok := options["width"].(int); ok && width > 0 {
-		args = append(args, "-vf", fmt.Sprintf("scale=%d:-1", width))
-	}
-
-	// Add frame rate if specified
-	if fps, ok := options["fps"].(int); ok && fps > 0 {
-		args = append(args, "-r", strconv.Itoa(fps))
-	}
-
-	// Add output file
-	args = append(args, outputFile)
+	// Log the conversion attempt
+	log.Info().
+		Str("source", inputPath).
+		Str("target", outputPath).
+		Str("target_format", targetFormat).
+		Msg("Starting video conversion with FFmpeg")
 
 	// Get FFmpeg path from tool manager
 	ffmpegPath, err := c.toolManager.GetFFmpegPath()
 	if err != nil {
-		return nil, iface.NewConversionError(
+		return iface.NewConversionError(
 			"tool_not_found",
 			"FFmpeg not found",
 			err,
 		)
 	}
 
-	// Run FFmpeg
-	cmd := exec.CommandContext(ctx, ffmpegPath, args...)
+	// Build FFmpeg command
+	args := []string{
+		"-y", // Overwrite output file if it exists
+		"-i", inputPath,
+	}
 
+	// Add video codec for the target format
+	videoCodec := c.getVideoCodecForFormat(targetFormat)
+	if videoCodec != "" {
+		args = append(args, "-c:v", videoCodec)
+	}
+
+	// Add audio codec for the target format
+	audioCodec := c.getAudioCodecForFormat(targetFormat)
+	if audioCodec != "" {
+		args = append(args, "-c:a", audioCodec)
+	}
+
+	// Add output file
+	args = append(args, outputPath)
+
+	// Execute FFmpeg
+	cmd := exec.CommandContext(ctx, ffmpegPath, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Error().
 			Err(err).
 			Str("output", string(output)).
-			Msg("ffmpeg command failed")
-		return nil, iface.NewConversionError(
+			Msg("Video conversion failed")
+
+		return iface.NewConversionError(
 			"conversion_failed",
-			"failed to convert video file",
+			"failed to convert video",
 			err,
 		)
 	}
 
-	// Open the output file for reading
-	result, err := os.Open(outputFile)
-	if err != nil {
-		return nil, iface.NewConversionError(
-			"io_error",
-			"failed to open output file",
-			err,
-		)
-	}
+	log.Info().
+		Str("output", outputPath).
+		Msg("Video conversion completed successfully")
 
-	return result, nil
+	return nil
 }
 
 // getVideoCodecForFormat returns the appropriate video codec for the target format
@@ -146,6 +118,8 @@ func (c *VideoConverter) getVideoCodecForFormat(format string) string {
 	switch strings.ToLower(format) {
 	case "mp4":
 		return "libx264"
+	case "webm":
+		return "libvpx"
 	case "avi":
 		return "mpeg4"
 	case "mov":
@@ -156,129 +130,42 @@ func (c *VideoConverter) getVideoCodecForFormat(format string) string {
 		return "wmv2"
 	case "flv":
 		return "flv"
-	case "webm":
-		return "libvpx"
 	case "3gp":
-		return "h263"
+		return "mpeg4"
 	case "gif":
 		return "gif"
 	default:
-		return "libx264" // Default to H.264
+		// Let FFmpeg choose the default codec
+		return ""
 	}
 }
 
 // getAudioCodecForFormat returns the appropriate audio codec for the target format
 func (c *VideoConverter) getAudioCodecForFormat(format string) string {
 	switch strings.ToLower(format) {
-	case "mp4", "mov", "mkv":
+	case "mp4", "m4a":
 		return "aac"
-	case "avi":
-		return "libmp3lame"
-	case "wmv":
-		return "wmav2"
-	case "flv":
-		return "libmp3lame"
 	case "webm":
 		return "libvorbis"
-	case "3gp":
-		return "amr_nb"
+	case "avi", "mov", "mkv", "wmv", "flv", "3gp":
+		return "aac"
 	case "gif":
-		return "" // GIF doesn't have audio
+		// GIF doesn't support audio
+		return "none"
 	default:
-		return "aac" // Default to AAC
+		// Let FFmpeg choose the default codec
+		return "aac"
 	}
 }
 
-// ValidateOptions validates the conversion options
-func (c *VideoConverter) ValidateOptions(options map[string]interface{}) error {
-	// Check required options
-	if _, ok := options["source_format"]; !ok {
-		return iface.NewConversionError("missing_option", "source_format is required", nil)
-	}
-
-	if _, ok := options["target_format"]; !ok {
-		return iface.NewConversionError("missing_option", "target_format is required", nil)
-	}
-
-	sourceFormat, ok := options["source_format"].(string)
-	if !ok {
-		return iface.NewConversionError("invalid_option", "source_format must be a string", nil)
-	}
-
-	targetFormat, ok := options["target_format"].(string)
-	if !ok {
-		return iface.NewConversionError("invalid_option", "target_format must be a string", nil)
-	}
-
-	if !c.SupportsConversion(sourceFormat, targetFormat) {
-		return iface.NewConversionError(
-			"unsupported_conversion",
-			fmt.Sprintf("conversion from %s to %s is not supported", sourceFormat, targetFormat),
-			nil,
-		)
-	}
-
-	// Validate video bitrate if provided
-	if bitrate, ok := options["video_bitrate"].(string); ok && bitrate != "" {
-		if !strings.HasSuffix(bitrate, "k") {
-			return iface.NewConversionError(
-				"invalid_option",
-				"video_bitrate must end with 'k' (e.g., '2000k')",
-				nil,
-			)
-		}
-
-		numericPart := strings.TrimSuffix(bitrate, "k")
-		if _, err := strconv.Atoi(numericPart); err != nil {
-			return iface.NewConversionError(
-				"invalid_option",
-				"video_bitrate must be a number followed by 'k' (e.g., '2000k')",
-				err,
-			)
+// Cleanup removes temporary files created during conversion
+func (c *VideoConverter) Cleanup(files ...string) error {
+	var lastErr error
+	for _, file := range files {
+		if err := os.RemoveAll(file); err != nil {
+			log.Error().Err(err).Str("file", file).Msg("Failed to remove temporary file")
+			lastErr = err
 		}
 	}
-
-	// Validate audio bitrate if provided
-	if bitrate, ok := options["audio_bitrate"].(string); ok && bitrate != "" {
-		if !strings.HasSuffix(bitrate, "k") {
-			return iface.NewConversionError(
-				"invalid_option",
-				"audio_bitrate must end with 'k' (e.g., '128k')",
-				nil,
-			)
-		}
-
-		numericPart := strings.TrimSuffix(bitrate, "k")
-		if _, err := strconv.Atoi(numericPart); err != nil {
-			return iface.NewConversionError(
-				"invalid_option",
-				"audio_bitrate must be a number followed by 'k' (e.g., '128k')",
-				err,
-			)
-		}
-	}
-
-	// Validate width if provided
-	if width, ok := options["width"].(int); ok && width > 0 {
-		if width < 32 || width > 7680 { // 8K resolution
-			return iface.NewConversionError(
-				"invalid_option",
-				"width must be between 32 and 7680 pixels",
-				nil,
-			)
-		}
-	}
-
-	// Validate FPS if provided
-	if fps, ok := options["fps"].(int); ok && fps > 0 {
-		if fps < 1 || fps > 120 {
-			return iface.NewConversionError(
-				"invalid_option",
-				"fps must be between 1 and 120",
-				nil,
-			)
-		}
-	}
-
-	return nil
+	return lastErr
 }

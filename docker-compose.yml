@@ -6,14 +6,17 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      - "4000:8080"  # Backend API
     environment:
       - APP_ENV=development
       - PORT=8080
       - UPLOAD_PATH=/app/uploads
+      - TEMP_PATH=/app/temp
       - MAX_UPLOAD_SIZE=104857600
+      - STORAGE_PROVIDER=local
     volumes:
       - ./uploads:/app/uploads
+      - ./temp:/app/temp
       - ./config:/app/config
     restart: unless-stopped
     healthcheck:
@@ -25,28 +28,21 @@ services:
     networks:
       - app-network
 
-  # Optional: MinIO for local S3-compatible storage
-  minio:
-    image: minio/minio
-    command: server /data --console-address ":9001"
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     ports:
-      - "9000:9000"  # API port
-      - "9001:9001"  # Console port
+      - "5001:5000"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      - VITE_API_URL=/api
     volumes:
-      - minio_data:/data
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - app
     networks:
       - app-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
-
-volumes:
-  minio_data:
 
 networks:
   app-network:

@@ -4,22 +4,18 @@ package iface
 import (
 	"context"
 	"fmt"
-	"io"
 )
 
 // Converter defines the interface for all converters
 type Converter interface {
-	// Convert converts the input file to the target format
-	Convert(ctx context.Context, input io.Reader, options map[string]interface{}) (io.Reader, error)
-	
-	// SupportedFormats returns a map of supported source formats to target formats
-	SupportedFormats() map[string][]string
-	
-	// ValidateOptions validates the conversion options
-	ValidateOptions(options map[string]interface{}) error
+	// Convert converts the input file to the output file with the target format
+	Convert(ctx context.Context, inputPath, outputPath string) error
 
 	// SupportsConversion checks if the converter supports the given conversion
 	SupportsConversion(sourceFormat, targetFormat string) bool
+
+	// Cleanup removes any temporary files
+	Cleanup(files ...string) error
 }
 
 // ConversionError represents a conversion error

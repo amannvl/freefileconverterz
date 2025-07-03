@@ -10,6 +10,7 @@ import Help from './pages/Help';
 import Contact from './pages/Contact';
 import CookiePolicy from './pages/CookiePolicy';
 import GDPR from './pages/GDPR';
+import ApiDocs from './pages/ApiDocs';
 import NotFound from './pages/NotFound';
 
 function App() {
@@ -28,6 +29,7 @@ function App() {
             <Route path="contact" element={<Contact />} />
             <Route path="cookie-policy" element={<CookiePolicy />} />
             <Route path="gdpr" element={<GDPR />} />
+            <Route path="api-docs" element={<ApiDocs />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </div>

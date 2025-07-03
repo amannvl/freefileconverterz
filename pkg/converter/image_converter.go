@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 )
 
@@ -17,7 +16,7 @@ type ImageConverter struct {
 // NewImageConverter creates a new ImageConverter
 func NewImageConverter() *ImageConverter {
 	return &ImageConverter{
-		binMgr: NewBinaryManager(),
+		binMgr: NewBinaryManager("./bin"),
 	}
 }
 
@@ -37,7 +36,7 @@ func (ic *ImageConverter) SupportedFormats() map[string][]string {
 // Convert converts an image from one format to another using ImageMagick
 func (ic *ImageConverter) Convert(ctx context.Context, inputPath, outputPath string, options map[string]interface{}) error {
 	// Check if convert (ImageMagick) is available
-	if !ic.binMgr.BinaryExists("convert") {
+	if !ic.binMgr.IsAvailable("convert") {
 		return fmt.Errorf("ImageMagick (convert) is required for image conversion")
 	}
 

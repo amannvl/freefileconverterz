@@ -1,17 +1,30 @@
 package main
 
 import (
-	"fmt"
 	"log"
-	"net/http"
+	"os"
+
+	"github.com/amannvl/freefileconverterz/internal/app"
+	"github.com/amannvl/freefileconverterz/internal/config"
 )
 
 func main() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Free File Converter Z is running!")
-	})
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
 
-	port := "8080"
-	log.Printf("Server starting on port %s...\n", port)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+	// Initialize application
+	application, err := app.New(cfg)
+	if err != nil {
+		log.Fatalf("Failed to initialize application: %v", err)
+	}
+
+	// Run the application
+	if err := application.Run(); err != nil {
+		log.Fatalf("Application error: %v", err)
+	}
+
+	os.Exit(0)
 }

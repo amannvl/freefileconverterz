@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -123,16 +124,6 @@ func (h *Handler) processConversion(conversionID string, fileHeader *FileHeader,
 		"targetFormat", targetFormat,
 	)
 
-	// Open the uploaded file
-	srcFile, err := fileHeader.Open()
-	if err != nil {
-		err = fmt.Errorf("failed to open uploaded file: %w", err)
-		h.logger.Error("File open error", "error", err, "conversionID", conversionID)
-		h.updateConversionError(conversionID, err)
-		return
-	}
-	defer srcFile.Close()
-
 	// Get the appropriate converter
 	ext := filepath.Ext(fileHeader.Filename())
 	if ext == "" {
@@ -162,36 +153,70 @@ func (h *Handler) processConversion(conversionID string, fileHeader *FileHeader,
 		"conversionID", conversionID,
 	)
 
-	// Prepare conversion options
-	options := map[string]interface{}{
-		"source_format": sourceFormat,
-		"target_format": targetFormat,
+	// Create temporary directory for conversion
+	tempDir, err := os.MkdirTemp("", "conversion_*")
+	if err != nil {
+		err = fmt.Errorf("failed to create temp directory: %w", err)
+		h.logger.Error("Temp dir error", "error", err, "conversionID", conversionID)
+		h.updateConversionError(conversionID, err)
+		return
 	}
+	defer os.RemoveAll(tempDir)
+
+	// Save uploaded file to temp location
+	srcPath := filepath.Join(tempDir, "input"+ext)
+	dstFile, err := os.Create(srcPath)
+	if err != nil {
+		err = fmt.Errorf("failed to create temp file: %w", err)
+		h.logger.Error("Temp file create error", "error", err, "conversionID", conversionID)
+		h.updateConversionError(conversionID, err)
+		return
+	}
+	defer dstFile.Close()
+
+	srcFile, err := fileHeader.Open()
+	if err != nil {
+		err = fmt.Errorf("failed to open uploaded file: %w", err)
+		h.logger.Error("File open error", "error", err, "conversionID", conversionID)
+		h.updateConversionError(conversionID, err)
+		return
+	}
+	defer srcFile.Close()
+
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		err = fmt.Errorf("failed to save uploaded file: %w", err)
+		h.logger.Error("File save error", "error", err, "conversionID", conversionID)
+		h.updateConversionError(conversionID, err)
+		return
+	}
+
+	// Create output path
+	outputPath := filepath.Join(tempDir, "output."+targetFormat)
 
 	// Convert the file
 	h.logger.Info("Starting file conversion", 
 		"conversionID", conversionID,
 		"sourceFormat", sourceFormat,
 		"targetFormat", targetFormat,
+		"sourcePath", srcPath,
+		"outputPath", outputPath,
 	)
-	convertedReader, err := converter.Convert(context.Background(), srcFile, options)
+
+	// Call the converter with file paths
+	err = converter.Convert(context.Background(), srcPath, outputPath)
 	if err != nil {
 		err = fmt.Errorf("conversion failed: %w", err)
 		h.logger.Error("Conversion error", "error", err, "conversionID", conversionID)
 		h.updateConversionError(conversionID, err)
 		return
 	}
-	// Close the reader if it implements io.Closer
-	if closer, ok := convertedReader.(io.Closer); ok {
-		defer closer.Close()
-	}
 
-	// Read the converted data
-	h.logger.Info("Reading converted data", "conversionID", conversionID)
-	convertedData, err := io.ReadAll(convertedReader)
+	// Read the converted file
+	h.logger.Info("Reading converted file", "conversionID", conversionID, "path", outputPath)
+	convertedData, err := os.ReadFile(outputPath)
 	if err != nil {
-		err = fmt.Errorf("failed to read converted data: %w", err)
-		h.logger.Error("Read converted data error", "error", err, "conversionID", conversionID)
+		err = fmt.Errorf("failed to read converted file: %w", err)
+		h.logger.Error("Read converted file error", "error", err, "conversionID", conversionID)
 		h.updateConversionError(conversionID, err)
 		return
 	}

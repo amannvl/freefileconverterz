@@ -4,103 +4,131 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/amannvl/freefileconverterz)](https://goreportcard.com/report/github.com/amannvl/freefileconverterz)
 [![Docker Pulls](https://img.shields.io/docker/pulls/amannvl/freefileconverterz)](https://hub.docker.com/r/amannvl/freefileconverterz)
 
-FreeFileConverterZ is a comprehensive, web-based file conversion platform that enables users to convert between a wide variety of document, image, audio, video, archive, and specialized file formats. The application prioritizes ease of use, speed, and security while handling file conversions in the cloud.
+FreeFileConverterZ is a high-performance, web-based file conversion platform that enables users to convert between a wide variety of document, image, audio, and video formats. Built with Go and React, it offers a modern, responsive interface with a robust backend.
 
 ## 🚀 Features
 
-- **Multiple Format Support**: Convert between 100+ file formats including documents, images, audio, and video
-- **Fast Conversions**: Utilize high-performance backend services for quick file processing
-- **Stateless Architecture**: No database required - simple and easy to deploy
-- **Secure & Private**: Files are automatically deleted after conversion
-- **No Registration Required**: Start converting files immediately without creating an account
-- **Responsive Design**: Works on desktop, tablet, and mobile devices
-- **Docker Ready**: Easy deployment with Docker Compose
+- **Multiple Format Support**: Convert between various document, image, audio, and video formats
+- **High Performance**: Built with Go for fast file processing
+- **Modern Web Interface**: Responsive React frontend with drag-and-drop support
 - **RESTful API**: Programmatic access to conversion services
+- **Docker Support**: Easy deployment with Docker and Docker Compose
+- **Cross-Platform**: Works on Windows, macOS, and Linux
 
-## Supported Formats
+## 🛠️ Tech Stack
 
-### Documents
-- **Word**: DOC, DOCX, ODT, RTF, TXT
-- **PDF**: PDF to Word, Excel, PowerPoint, Images, and more
-- **Excel**: XLS, XLSX, CSV, ODS
-- **PowerPoint**: PPT, PPTX, ODP
-- **E-books**: EPUB, MOBI, AZW, FB2
+- **Backend**: Go 1.21+
+- **Frontend**: React, TypeScript, TailwindCSS
+- **API**: RESTful with Gin framework
+- **Storage**: Local filesystem or S3-compatible storage
+- **Containerization**: Docker
+- **Logging**: Zerolog for structured logging
 
-### Images
-- **Raster**: JPG, PNG, GIF, WEBP, BMP, TIFF, HEIC
-- **Vector**: SVG, AI, EPS, PDF
+## 📋 Prerequisites
 
-### Audio
-- MP3, WAV, AAC, FLAC, ALAC, AIFF, WMA, OGG, M4A, OPUS
-
-### Video
-- MP4, AVI, MOV, MKV, WMV, FLV, WEBM, 3GP, MTS, M2TS
-
-### Archives
-- ZIP, RAR, 7Z, TAR, TAR.GZ, TAR.BZ2, TAR.XZ, ISO
+- Go 1.21+
+- Node.js 18+ (for frontend development)
+- Docker and Docker Compose (for containerized deployment)
+- Required system tools (handled automatically in Docker):
+  - FFmpeg (for audio/video conversion)
+  - ImageMagick (for image processing)
+  - LibreOffice (for document conversion)
+  - p7zip, unrar (for archive handling)
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Development Setup
 
-- Docker and Docker Compose (for containerized deployment)
-- Go 1.21+ and Node.js 18+ (for development)
-- For Linux systems, the following system packages are recommended but not required (will be handled automatically):
-   # On macOS (using Homebrew)
-   brew install unrar p7zip ffmpeg imagemagick libreoffice
-   ```
-
-2. **Local binaries** (recommended for production):
-   ```bash
-   # Download and set up all required binaries in ./bin/linux/amd64/
-   make setup-binaries
-   
-   # The application will automatically use these binaries if they exist
-   ```
-
-### Building for Production
-
-```bash
-# Build the application
-make build
-
-# The binary will be available at ./bin/freefileconverterz
-```
-
-## 🐳 Production Deployment
-
-### Prerequisites
-
-- Docker 20.10+
-- Docker Compose 2.0+
-
-### Steps
-
-1. Clone the repository:
+1. **Clone the repository**:
    ```bash
    git clone https://github.com/amannvl/freefileconverterz.git
    cd freefileconverterz
    ```
 
-2. Build and start the production stack:
+2. **Set up environment variables**:
    ```bash
-   docker-compose -f docker-compose.prod.yml up -d
+   cp .env.example .env
+   # Edit .env as needed
    ```
 
-3. The application will be available at http://localhost:3000
+3. **Install Go dependencies**:
+   ```bash
+   go mod download
+   ```
+
+4. **Build and run the backend**:
+   ```bash
+   go run main.go
+   ```
+
+5. **Set up the frontend**:
+   ```bash
+   cd frontend
+   npm install
+   npm start
+   ```
+
+The application will be available at `http://localhost:3000`
+
+### Production Deployment
+
+1. **Using Docker Compose (recommended)**:
+   ```bash
+   docker-compose -f docker-compose.prod.yml up -d --build
+   ```
+
+2. **Using the binary**:
+   ```bash
+   # Build the application
+   make build
+   
+   # Run the server
+   ./bin/freefileconverterz
+   ```
+
+## 🔧 Configuration
 
 ### Environment Variables
 
-You can customize the application behavior using these environment variables:
-
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `APP_ENV` | Application environment (development, production) | `production` |
-| `PORT` | Port to listen on | `3000` |
-| `UPLOAD_DIR` | Directory to store uploaded files | `/app/uploads` |
-| `MAX_UPLOAD_SIZE` | Maximum file upload size in bytes | `104857600` (100MB) |
-| `FILE_RETENTION` | How long to keep converted files | `1h` |
-| `LOG_LEVEL` | Logging level (debug, info, warn, error) | `info` |
+| `APP_ENV` | Application environment (development, production) | `development` |
+| `PORT` | Port to listen on | `8080` |
+| `UPLOAD_DIR` | Directory to store uploaded files | `./uploads` |
+| `TEMP_DIR` | Directory for temporary files | `./temp` |
+| `MAX_UPLOAD_SIZE` | Maximum upload size in bytes | `104857600` (100MB) |
+| `JWT_SECRET` | Secret key for JWT authentication | Randomly generated |
+| `CORS_ALLOWED_ORIGINS` | Allowed CORS origins | `*` |
+
+### File Storage
+
+The application can be configured to use either local filesystem or S3-compatible storage by setting the appropriate environment variables.
+
+## 📚 API Documentation
+
+The API documentation is available at `/api/docs` when running in development mode.
+
+### Endpoints
+
+- `GET /api/v1/health` - Health check
+- `GET /api/v1/formats` - List supported formats
+- `POST /api/v1/convert` - Convert a file
+
+## 🧪 Testing
+
+Run the test suite:
+
+```bash
+go test -v ./...
+```
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) for details.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 ## Project Structure
 
 ```

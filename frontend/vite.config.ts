@@ -11,10 +11,10 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000,
+    port: 5000,
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'http://localhost:4000',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/api/, ''),
@@ -22,7 +22,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../static',
+    outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
       input: {
