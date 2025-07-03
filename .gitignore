@@ -45,6 +45,7 @@ Thumbs.db
 # Local development files
 uploads/
 temp/
+test_files/
 
 # Local config files
 config.yaml
