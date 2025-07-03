@@ -259,10 +259,43 @@ func setupRouter(conv iface.Converter, storage *storage.FileStorage, logger util
 		// TODO: Add other endpoints as they are implemented
 	}
 
-	// Frontend route (if serving frontend from the same server)
-	router.GET("/", func(c *gin.Context) {
-		c.File("./frontend/dist/index.html")
-	})
+	// Serve static files from the frontend build directory
+	frontendDir := "./frontend/dist"
+	if _, err := os.Stat(frontendDir); !os.IsNotExist(err) {
+		// Serve static files
+		router.Static("/assets", filepath.Join(frontendDir, "assets"))
+		router.StaticFile("/favicon.ico", filepath.Join(frontendDir, "favicon.ico"))
+
+		// Handle all other routes by serving index.html for client-side routing
+		router.NoRoute(func(c *gin.Context) {
+			// Don't serve HTML for API routes
+			if strings.HasPrefix(c.Request.URL.Path, "/api") {
+				c.JSON(http.StatusNotFound, gin.H{
+					"error":   "Not Found",
+					"message": fmt.Sprintf("The requested path %s was not found", c.Request.URL.Path),
+				})
+				return
+			}
+
+			// For all other routes, serve index.html
+			c.File(filepath.Join(frontendDir, "index.html"))
+		})
+	} else {
+		// If frontend files don't exist, just return a 404 for non-API routes
+		router.NoRoute(func(c *gin.Context) {
+			if !strings.HasPrefix(c.Request.URL.Path, "/api") {
+				c.JSON(http.StatusNotFound, gin.H{
+					"error":   "Frontend not found",
+					"message": "Frontend files are not available. Please build the frontend first.",
+				})
+				return
+			}
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "Not Found",
+				"message": fmt.Sprintf("The requested path %s was not found", c.Request.URL.Path),
+			})
+		})
+	}
 
 	// 404 handler
 	router.NoRoute(func(c *gin.Context) {

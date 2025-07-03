@@ -1,0 +1,97 @@
+# Stage 1: Build backend
+FROM --platform=$BUILDPLATFORM golang:1.23.0-alpine AS backend-builder
+WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache git gcc musl-dev
+
+# Download dependencies
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the application with static linking
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -a -installsuffix cgo -o freefileconverterz ./cmd/api
+
+# Stage 2: Build frontend
+FROM node:18-alpine AS frontend-builder
+WORKDIR /app/frontend
+
+# Copy package files
+COPY frontend/package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy frontend source
+COPY frontend/ .
+
+# Build the frontend
+RUN npm run build
+
+# Stage 3: Final image
+FROM ubuntu:22.04
+
+# Install system dependencies
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    nginx \
+    ffmpeg \
+    imagemagick \
+    p7zip-full \
+    unrar \
+    libreoffice \
+    fonts-freefont-ttf \
+    ghostscript \
+    libsm6 \
+    libxrender1 \
+    libxext6 \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libxcb-shm0 \
+    libxcb-xfixes0 \
+    libxcb-randr0 \
+    libxcb-shape0 \
+    libx11-xcb1 \
+    libx11-6 \
+    libxi6 \
+    libxrender1 \
+    libxrandr2 \
+    libxfixes3 \
+    libxcb1 \
+    libx11-xcb-dev \
+    libxcb1-dev \
+    ca-certificates \
+    libssl-dev \
+    libgomp1 \
+    strace \
+    file \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure nginx
+COPY --from=frontend-builder /app/frontend/dist /var/www/html
+COPY --from=frontend-builder /app/frontend/nginx.conf /etc/nginx/conf.d/default.conf
+
+# Create necessary directories
+RUN mkdir -p /app/uploads /app/temp /app/bin /app/config \
+    && chmod -R 777 /app/uploads /app/temp /var/www/html /app/config
+
+# Copy backend binary and config
+COPY --from=backend-builder /app/freefileconverterz /app/
+RUN chmod +x /app/freefileconverterz
+COPY --from=backend-builder /app/config /app/config/
+
+# Copy and set up startup script
+COPY startup.sh /start.sh
+RUN chmod +x /start.sh
+
+# Expose ports
+EXPOSE 80 8080
+
+# Set working directory
+WORKDIR /app
+
+# Set the entrypoint
+ENTRYPOINT ["/start.sh"]
